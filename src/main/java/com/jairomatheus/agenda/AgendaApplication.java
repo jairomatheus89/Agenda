@@ -9,13 +9,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Optional;
 
 @SpringBootApplication
 public class AgendaApplication {
@@ -65,49 +64,62 @@ class Contato {
 	}
 }
 
-interface ContatoRepository extends JpaRepository<Contato, Integer> {}
-
-class ContatoDTO {
-	private String name;
-	private String phone;
-	private String email;
-
-	public String getName(){
-		return name;
-	}
-	public String getPhone(){
-		return phone;
-	}
-	public String getEmail(){
-		return email;
-	}
-}
+record ContatoDTO(
+	Integer id,
+	String name,
+	String phone,
+	String email
+){}
 
 @RestController
 class BasicController {
 
-	private ContatoRepository repository;
+	private final ContatoService service;
 
-	public BasicController(ContatoRepository repository){
-		this.repository = repository;
+	public BasicController(ContatoService service){
+		this.service = service;
 	}
 
 	@GetMapping("/")
 	public String getRootPage() {
+		return service.htmlStringContacts();
+	}
+
+	@PostMapping("/add")
+	public String add(@RequestBody ContatoDTO dto) {
+		return service.addContact(dto);
+	}
+
+	@DeleteMapping("deletecontact")
+	public String remove(@RequestBody ContatoDTO dto){
+		return service.removeContact(dto);
+	}
+}
+
+@Service
+class ContatoService {
+
+	private final ContatoRepository repository;
+
+	public ContatoService(ContatoRepository repository){
+		this.repository = repository;
+	}
+
+	public String htmlStringContacts(){
 		List<Contato> contacts = this.repository.findAll();
 
 		StringBuilder contactsString = new StringBuilder();
 
-		contactsString.append("<h1> LISTA DE CONTATOS </h1><br>");
+		contactsString.append("<h1> LISTA DE CONTATOS </h1>");
 
 		contacts.forEach(contato -> {
 			contactsString.append(
-					"Name: %s<br>Phone: %s<br>Email: %s<br>-----------------------------<br>"
-							.formatted(
-									contato.getName(),
-									contato.getPhone(),
-									contato.getEmail()
-							)
+				"Name: %s<br>Phone: %s<br>Email: %s<br>-----------------------------<br>"
+					.formatted(
+						contato.getName(),
+						contato.getPhone(),
+						contato.getEmail()
+					)
 			);
 		});
 
@@ -120,14 +132,12 @@ class BasicController {
         """.formatted(contactsString);
 	}
 
-	@PostMapping("/add")
-	public String add(@RequestBody ContatoDTO entity) {
-
+	public String addContact(ContatoDTO dto){
 		Contato contact = new Contato();
 
-		contact.setName(entity.getName());
-		contact.setPhone(entity.getPhone());
-		contact.setEmail(entity.getEmail());
+		contact.setName(dto.name());
+		contact.setPhone(dto.phone());
+		contact.setEmail(dto.email());
 
 		String msg;
 
@@ -137,20 +147,46 @@ class BasicController {
                 Olá %s\n
                 PARECE QUE SEU NUMERO É %s\n
                 E seu email: %s\n
-            """.formatted(entity.getName(), entity.getPhone(), entity.getEmail());
+            """.formatted(contact.getName(), contact.getPhone(), contact.getEmail());
 
 			return msg;
 		} catch (DataIntegrityViolationException e) {
 
 			String error = e.getMostSpecificCause().getMessage();
-
 			if(error.contains("contato_phone_key")){
 				msg = "TELEFONE REPETIDO JA EXISTENTE...";
 				return msg;
 			}
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "INTEGRIDADE DE DADOS COMPROMETIDA...");
+		}
+	}
 
+	public String removeContact(ContatoDTO dto){
+		String msg;
+
+		Optional<Contato> user = this.repository.findById(dto.id());
+
+		if(user.isEmpty()) return "Nem Existe esse usuario mais brow!...";
+
+		Contato contato = user.get();
+
+		String name = contato.getName();
+		String phone = contato.getPhone();
+		String email = contato.getEmail();
+
+		try{
+			this.repository.delete(contato);
+			msg = """
+                USUARIO EXCLUIDO:\n
+                Name: %s\n
+                Phone: %s\n
+                Email: %s\n
+            """.formatted(name, phone, email);
+			return msg;
+		} catch (DataIntegrityViolationException e) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMostSpecificCause().getMessage());
 		}
 	}
 }
 
+interface ContatoRepository extends JpaRepository<Contato, Integer> {}
