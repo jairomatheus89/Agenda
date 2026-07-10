@@ -6,12 +6,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +24,19 @@ public class AgendaApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(AgendaApplication.class, args);
+	}
+
+	@Bean
+	public WebMvcConfigurer corsConfigure(){
+		return new WebMvcConfigurer() {
+			@Override
+			public void addCorsMappings(CorsRegistry registry){
+				registry.addMapping("/**")
+						.allowedOrigins("http://localhost:5173")
+						.allowedMethods("*")
+						.allowedHeaders("*");
+			}
+		};
 	}
 }
 
@@ -81,7 +97,7 @@ class BasicController {
 	}
 
 	@GetMapping("/")
-	public String getRootPage() {
+	public List<Contato> getRootPage() {
 		return service.htmlStringContacts();
 	}
 
@@ -105,31 +121,9 @@ class ContatoService {
 		this.repository = repository;
 	}
 
-	public String htmlStringContacts(){
+	public List<Contato> htmlStringContacts(){
 		List<Contato> contacts = this.repository.findAll();
-
-		StringBuilder contactsString = new StringBuilder();
-
-		contactsString.append("<h1> LISTA DE CONTATOS </h1>");
-
-		contacts.forEach(contato -> {
-			contactsString.append(
-				"Name: %s<br>Phone: %s<br>Email: %s<br>-----------------------------<br>"
-					.formatted(
-						contato.getName(),
-						contato.getPhone(),
-						contato.getEmail()
-					)
-			);
-		});
-
-		return """
-            <body>
-                <div>
-                    %s
-                </div>
-            </body>
-        """.formatted(contactsString);
+		return contacts;
 	}
 
 	public String addContact(ContatoDTO dto){
@@ -144,9 +138,9 @@ class ContatoService {
 		try{
 			this.repository.save(contact);
 			msg = """
-                Olá %s\n
-                PARECE QUE SEU NUMERO É %s\n
-                E seu email: %s\n
+                CONTATO %s\n
+                NUMERO: %s\n
+                EMAIL: %s\n
             """.formatted(contact.getName(), contact.getPhone(), contact.getEmail());
 
 			return msg;
@@ -154,10 +148,9 @@ class ContatoService {
 
 			String error = e.getMostSpecificCause().getMessage();
 			if(error.contains("contato_phone_key")){
-				msg = "TELEFONE REPETIDO JA EXISTENTE...";
-				return msg;
+				throw new ResponseStatusException(HttpStatus.CONFLICT, "TELEFONE REPETIDO JA EXISTENTE");
 			}
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "INTEGRIDADE DE DADOS COMPROMETIDA...");
+			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "ERRO AO SALVAR CONTATO");
 		}
 	}
 
