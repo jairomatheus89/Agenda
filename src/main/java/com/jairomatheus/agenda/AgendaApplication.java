@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -102,12 +103,12 @@ class BasicController {
 	}
 
 	@PostMapping("/add")
-	public String add(@RequestBody ContatoDTO dto) {
+	public ResponseEntity add(@RequestBody ContatoDTO dto) {
 		return service.addContact(dto);
 	}
 
 	@DeleteMapping("deletecontact")
-	public String remove(@RequestBody ContatoDTO dto){
+	public ResponseEntity remove(@RequestBody ContatoDTO dto){
 		return service.removeContact(dto);
 	}
 }
@@ -126,7 +127,7 @@ class ContatoService {
 		return contacts;
 	}
 
-	public String addContact(ContatoDTO dto){
+	public ResponseEntity addContact(ContatoDTO dto){
 		Contato contact = new Contato();
 
 		contact.setName(dto.name());
@@ -137,29 +138,25 @@ class ContatoService {
 
 		try{
 			this.repository.save(contact);
-			msg = """
-                CONTATO %s\n
-                NUMERO: %s\n
-                EMAIL: %s\n
-            """.formatted(contact.getName(), contact.getPhone(), contact.getEmail());
+			msg = "Contato Criado com Sucesso!";
 
-			return msg;
+			return ResponseEntity.ok(msg);
 		} catch (DataIntegrityViolationException e) {
 
 			String error = e.getMostSpecificCause().getMessage();
 			if(error.contains("contato_phone_key")){
-				throw new ResponseStatusException(HttpStatus.CONFLICT, "TELEFONE REPETIDO JA EXISTENTE");
+				return ResponseEntity.status(HttpStatus.CONFLICT).body("Telefone repetido já existente");
 			}
-			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "ERRO AO SALVAR CONTATO");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("ERRO AO SALVAR CONTATO");
 		}
 	}
 
-	public String removeContact(ContatoDTO dto){
+	public ResponseEntity removeContact(ContatoDTO dto){
 		String msg;
 
 		Optional<Contato> user = this.repository.findById(dto.id());
 
-		if(user.isEmpty()) return "Nem Existe esse usuario mais brow!...";
+		if(user.isEmpty()) return ResponseEntity.status(HttpStatus.CONFLICT).body("Usuario nao existente");
 
 		Contato contato = user.get();
 
@@ -169,13 +166,8 @@ class ContatoService {
 
 		try{
 			this.repository.delete(contato);
-			msg = """
-                USUARIO EXCLUIDO:\n
-                Name: %s\n
-                Phone: %s\n
-                Email: %s\n
-            """.formatted(name, phone, email);
-			return msg;
+			msg = "Usuário excluído com sucesso!";
+			return ResponseEntity.ok(msg);
 		} catch (DataIntegrityViolationException e) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMostSpecificCause().getMessage());
 		}
